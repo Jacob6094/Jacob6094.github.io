@@ -61,7 +61,7 @@ ffuf -w /usr/share/wordlists/seclists/Discovery/Web-Content/common.txt:FUZZ -u h
 
 Report Bug Feature
 
-![image.png](/assets/img/imagery/1.png)
+![image.png](/assets/img/Imagery/1.png)
 
 ```php
 POST /report_bug HTTP/1.1
@@ -90,7 +90,7 @@ Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
 
 made it to the admin panel
 
-![image.png](/assets/img/imagery/2.png)
+![image.png](/assets/img/Imagery/2.png)
 
 ---
 
@@ -98,17 +98,17 @@ made it to the admin panel
 
 LFI
 
-![image.png](/assets/img/imagery/3.png)
+![image.png](/assets/img/Imagery/3.png)
 
-![image.png](/assets/img/imagery/4.png)
+![image.png](/assets/img/Imagery/4.png)
 
 Let's try a test for LFI
 
-![image.png](/assets/img/imagery/5.png)
+![image.png](/assets/img/Imagery/5.png)
 
 We can check the cmdline
 
-![image.png](/assets/img/imagery/6.png)
+![image.png](/assets/img/Imagery/6.png)
 
 and the config
 
@@ -249,11 +249,11 @@ if __name__ == '__main__':
 
 We can see that there is a .json database. So we can check out the JSON database.
 
-![image.png](/assets/img/imagery/7.png)
+![image.png](/assets/img/Imagery/7.png)
 
 Let's try to crack both hashes
 
-![image.png](/assets/img/imagery/8.png)
+![image.png](/assets/img/Imagery/8.png)
 
 But we can't ssh in
 
@@ -335,7 +335,7 @@ We can see that the input x and y, as well as the width and height, are being us
 
 So if we fill this out
 
-![image.png](/assets/img/imagery/9.png)
+![image.png](/assets/img/Imagery/9.png)
 
 then open it up in Burp Suite t
 
@@ -466,7 +466,7 @@ from here, we can unzip it and cat the db.json fil,e and we see the user mark
 
 We can crack his password
 
-![image.png](/assets/img/imagery/10.png)
+![image.png](/assets/img/Imagery/10.png)
 
 ---
 
