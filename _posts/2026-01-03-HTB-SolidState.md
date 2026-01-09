@@ -3,6 +3,8 @@ title: "HTB SolidState"
 date: 2026-01-03 11:00:00 +1100
 categories: [Hack The Box]
 tags: [apache james, telnet,cron job]
+image:
+  path: /assets/img/SolidState/icon.png
 ---
 
 
@@ -10,8 +12,6 @@ tags: [apache james, telnet,cron job]
 
 SolidState is a medium difficulty machine that requires chaining of multiple attack vectors in order to get a privileged shell. As a note, in some cases the exploit may fail to trigger more than once and a machine reset is required.
 
-
-![solidstate.png](https://htb-mp-prod-public-storage.s3.eu-central-1.amazonaws.com/avatars/cfb87d43d2b47380fd0f3a3efb6a47ed.png)
 
 
 As usual lets start off with an nmap scan. 
