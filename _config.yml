@@ -26,7 +26,7 @@ timezone:
 
 title: Jacobs Blog # the main title
 
-tagline: My Personal Blog # it will display as the subtitle
+tagline: Write ups, cert reviews and anything else. # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   A minimal, responsive and feature-rich Jekyll theme for technical writing.
@@ -155,7 +155,7 @@ pwa:
     deny_paths:
       # - "/example"  # URLs match `<SITE_URL>/example/*` will not be cached by the PWA
 
-paginate: 10
+paginate: 1000
 
 # The base URL of your site
 baseurl: ""

